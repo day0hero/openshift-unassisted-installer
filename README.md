@@ -12,6 +12,10 @@ the <insert_variables_file_name>.yml to create the file from jinja template.
 
 Check out the [ansible-docs](docs/ansible-deploy.md) for using ansible.
 
+The artifacts get created in `~/cluster_name-ocp_version` ex: `~/ocp-4.11.12` 
+
+To override this, update the `ocp_deploy_directory` variable in `unassisted-sno-deploy.yml`
+
 ### Deploying Single Node OpenShift with the generated artifacts:
 
 Once the iso has been generated, you will need to create a bootable media device (DVD,USB) with the ISO. 
