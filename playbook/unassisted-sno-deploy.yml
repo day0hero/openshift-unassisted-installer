@@ -1,0 +1,115 @@
+- name: un-assisted openshift 
+  hosts: localhost
+  connection: local
+  tasks:
+    - name: sno - get latest stable version
+      ansible.builtin.shell:
+        curl -s {{ ocp_www }}/release.txt | grep Name | awk '{print $2}'
+      args:
+        executable: /bin/bash
+      register: ocp_version
+      changed_when: ocp_version | length == 0
+
+    - ansible.builtin.set_fact:
+        ocp_version: "{{ ocp_version.stdout }}"
+    
+    - ansible.builtin.set_fact:
+        ocp_deploy_directory: "{{ lookup('env','HOME') }}/{{ ocp_version }}"
+
+    - name: sno - create artifact directory
+      ansible.builtin.file:
+        state: directory
+        owner: "{{ lookup('env', 'USER') }}"
+        path: "{{ ocp_deploy_directory }}"
+        mode: 0755
+
+    - name: sno - make sure podman is installed
+      ansible.builtin.package:
+        name: podman
+        state: installed
+    
+    - name: sno - check for existing oc binary
+      ansible.builtin.stat:
+        path: "{{ ocp_deploy_directory }}/oc"
+      register: oc
+
+    - name: sno - check for existing openshift-install binary
+      ansible.builtin.stat:
+        path: "{{ ocp_deploy_directory }}/oc"
+      register: ocp_install
+    
+    - name: sno - set_fact for distribution
+      ansible.builtin.set_fact:
+        distro: "{% if ansible_system == 'Darwin' %}mac{% elif ansible_system == 'Linux' %}linux{% endif %}"
+
+    - name: sno - download the required binaries
+      ansible.builtin.unarchive:
+        src: "{{ ocp_www }}/{{ item }}"
+        remote_src: yes
+        mode: 0755
+        dest: "{{ ocp_deploy_directory }}"
+      when: (not oc.stat.exists ) and (not ocp_install.stat.exists)
+      loop:
+        - "openshift-client-{{ distro }}.tar.gz"
+        - "openshift-install-{{ distro }}.tar.gz"
+
+    - name: sno - create directory for openshift manifests
+      ansible.builtin.file:
+        name: "{{ ocp_deploy_directory }}/ocp"
+        state: directory
+        owner: "{{ lookup('env', 'USER') }}"
+        mode: 0755
+
+    - name: sno - create install-config.yaml template
+      ansible.builtin.template:
+        src: ./install-config.yaml.j2
+        dest: "{{ item }}"
+        mode: 0644
+        owner: "{{ lookup('env', 'USER') }}"
+      loop:
+        - "{{ ocp_deploy_directory }}/install-config.yaml"
+        - "{{ ocp_deploy_directory }}/ocp/install-config.yaml"
+    
+    - name: sno - execute openshift-install to create the manifests
+      ansible.builtin.shell:
+        "{{ ocp_deploy_directory }}/openshift-install --dir {{ ocp_deploy_directory }}/ocp create single-node-ignition-config"
+      args:
+        executable: /bin/bash
+        creates: "{{ ocp_deploy_directory }}/ocp/metadata.json"
+    
+    - name: sno - check for existing rhcos image
+      ansible.builtin.stat:
+        path: "{{ ocp_deploy_directory }}/rhcos-live.iso"
+      register: iso
+
+    - name: sno - generate the ISO_URL to download 
+      ansible.builtin.shell:
+        '{{ ocp_deploy_directory }}/openshift-install coreos print-stream-json | grep location | grep {{ ansible_architecture }} | grep iso | cut -d\" -f4'
+      args:
+        executable: /bin/bash
+      register: iso_url
+      changed_when: iso_url | length == 0
+    
+    - name: sno - set iso_url fact
+      ansible.builtin.set_fact:
+        iso_url: "{{ iso_url.stdout }}"
+    
+    - name: sno - download the rhcos image iso
+      ansible.builtin.get_url:
+        url: "{{ iso_url }}"
+        dest: "{{ ocp_deploy_directory }}/rhcos-live.iso"
+      when: not iso.stat.exists
+
+    - name: sno - Create the iso for sno installation
+      containers.podman.podman_container:
+        name: ignition_embedder
+        image: 'quay.io/coreos/coreos-installer:release'
+        state: started
+        restart: no
+        privileged: yes
+        workdir: /data
+        command: iso ignition embed -fi ocp/bootstrap-in-place-for-live-iso.ign rhcos-live.iso
+        volume:
+          - "/dev/:/dev"
+          - "{{ ocp_deploy_directory }}:/data"
+          - "{% if distro == 'Linux' %}/run/udev:/run/udev{% endif %}"

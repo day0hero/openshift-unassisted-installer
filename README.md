@@ -10,6 +10,8 @@ There is an install-config.yaml template in the examples directory, that if you 
 need to update with your settings and then run the script. The ansible playbook will take the values from 
 the <insert_variables_file_name>.yml to create the file from jinja template. 
 
+Check out the [ansible-docs](docs/ansible-deploy.md) for using ansible.
+
 ### Deploying Single Node OpenShift with the generated artifacts:
 
 Once the iso has been generated, you will need to create a bootable media device (DVD,USB) with the ISO. 
@@ -23,9 +25,7 @@ Once you have your iso copied to your removable media, plug the device into your
 machine and boot from the ISO. If you are creating a virtual machine you can boot directly 
 from the iso without the need to burn to removable media.
 
-
 ### Staging/ To Do:
 - link videos to SNO demo
 - link to adding worker to SNO cluster
 - link to unassisted installer demo
-
