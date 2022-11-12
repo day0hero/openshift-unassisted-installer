@@ -14,7 +14,7 @@
         ocp_version: "{{ ocp_version.stdout }}"
     
     - ansible.builtin.set_fact:
-        ocp_deploy_directory: "{{ lookup('env','HOME') }}/{{ ocp_version }}"
+        ocp_deploy_directory: "{{ lookup('env','HOME') }}/{{ cluster_name }}-{{ ocp_version }}"
 
     - name: sno - create artifact directory
       ansible.builtin.file:
